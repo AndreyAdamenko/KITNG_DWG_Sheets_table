@@ -252,3 +252,4 @@ namespace KITNG_DWG_Sheets_table
             // Действия при выгрузке плагина
         }
     }
+}
