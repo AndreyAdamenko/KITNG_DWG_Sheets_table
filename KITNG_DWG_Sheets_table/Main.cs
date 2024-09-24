@@ -8,6 +8,7 @@ namespace KITNG_DWG_Sheets_table
     public partial class Main : Form
     {
         public List<string> SortedFiles { get; private set; }
+        public int StartNumber { get; private set; }
 
         private int dragIndex = -1;
         private bool isDragging = false;
@@ -100,6 +101,8 @@ namespace KITNG_DWG_Sheets_table
             {
                 SortedFiles.Add(item.ToString());
             }
+
+            StartNumber = (int)numericUpDown1.Value;
 
             this.DialogResult = DialogResult.OK;
             this.Close();

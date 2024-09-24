@@ -21,6 +21,7 @@ namespace KITNG_DWG_Sheets_table
 
             // Создаем и показываем форму для выбора и сортировки файлов
             List<string> drawingFiles = null;
+            int startNumber = 0;
             using (Main mainForm = new Main())
             {
                 Application.ShowModalDialog(mainForm);
@@ -31,6 +32,7 @@ namespace KITNG_DWG_Sheets_table
                     return;
                 }
 
+                startNumber = mainForm.StartNumber;
                 drawingFiles = mainForm.SortedFiles;
 
                 if (drawingFiles == null || drawingFiles.Count == 0)
@@ -48,7 +50,7 @@ namespace KITNG_DWG_Sheets_table
             List<string> filesWithoutBlock = new List<string>();
 
             // Счетчик для номера листа
-            int sheetNumber = 1;
+            int sheetNumber = startNumber;
 
             // Строка для записи диапазонов номеров листов в файлы
             List<string> fileSheetRanges = new List<string>();
