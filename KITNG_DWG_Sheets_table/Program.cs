@@ -50,8 +50,13 @@ namespace KITNG_DWG_Sheets_table
             // Счетчик для номера листа
             int sheetNumber = 1;
 
+            // Строка для записи диапазонов номеров листов в файлы
+            List<string> fileSheetRanges = new List<string>();
+
             foreach (string file in drawingFiles)
             {
+                int initialSheetNumber = sheetNumber; // Начальный номер для файла
+
                 try
                 {
                     // Проверяем, доступен ли файл для чтения
@@ -117,7 +122,7 @@ namespace KITNG_DWG_Sheets_table
                                     skippedSheets++;
                                 }
 
-                                sheetNumber++; // Увеличиваем номер листа даже если файл не открылся или был пропущен
+                                sheetNumber++; // Увеличиваем номер листа
                                 totalSheets++;
                             }
 
@@ -132,6 +137,11 @@ namespace KITNG_DWG_Sheets_table
                         filesWithoutBlock.Add(file);
                     }
 
+                    // Формируем диапазон номеров листов для текущего файла
+                    int finalSheetNumber = sheetNumber - 1; // Конечный номер листа для файла
+                    string sheetRange = $"{Path.GetFileName(file)}: {initialSheetNumber}-{finalSheetNumber}";
+                    fileSheetRanges.Add(sheetRange);
+
                     // Сохраняем и закрываем документ
                     doc.CloseAndSave(file);
                     ed.WriteMessage($"\nЧертеж сохранен: {file}");
@@ -144,6 +154,32 @@ namespace KITNG_DWG_Sheets_table
                     sheetNumber++; // Увеличиваем номер листа, даже если возникла ошибка при обработке
                     continue;
                 }
+            }
+
+            // Записываем данные в текстовый файл в папку temp
+            string tempFilePath = Path.Combine(Path.GetTempPath(), $"KITNG_DWG_Sheets_table_SheetRanges_{DateTime.Now.Ticks}.txt");
+            try
+            {
+                File.WriteAllLines(tempFilePath, fileSheetRanges);
+                ed.WriteMessage($"\nРезультаты сохранены в файл: {tempFilePath}");
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nОшибка при сохранении результатов в файл: {ex.Message}");
+            }
+
+            // Открываем файл после создания
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
+                {
+                    FileName = tempFilePath,
+                    UseShellExecute = true // Запуск через Shell
+                });
+            }
+            catch (System.Exception ex)
+            {
+                ed.WriteMessage($"\nОшибка при открытии файла: {ex.Message}");
             }
 
             // Формируем итоговое сообщение
