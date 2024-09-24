@@ -40,6 +40,13 @@ namespace KITNG_DWG_Sheets_table
                 }
             }
 
+            // Счетчики для итогового сообщения
+            int totalFiles = 0;
+            int totalSheets = 0;
+            int skippedFiles = 0;
+            int skippedSheets = 0;
+            List<string> filesWithoutBlock = new List<string>();
+
             // Счетчик для номера листа
             int sheetNumber = 1;
 
@@ -51,12 +58,14 @@ namespace KITNG_DWG_Sheets_table
                     if (IsFileLocked(file))
                     {
                         ed.WriteMessage($"\nФайл занят и не может быть открыт: {file}");
+                        skippedFiles++;
                         continue;
                     }
 
                     // Открываем чертеж
                     Document doc = Application.DocumentManager.Open(file, false);
                     ed.WriteMessage($"\nОткрыт чертеж: {file}");
+                    bool blockFoundInFile = false; // Флаг, указывающий найден ли блок в файле
 
                     using (doc.LockDocument())
                     {
@@ -75,6 +84,7 @@ namespace KITNG_DWG_Sheets_table
                                 if (layout.ModelType) continue;
 
                                 BlockTableRecord btr = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
+                                bool blockFoundInSheet = false;
 
                                 foreach (ObjectId id in btr)
                                 {
@@ -85,6 +95,9 @@ namespace KITNG_DWG_Sheets_table
                                         BlockTableRecord blockDef = (BlockTableRecord)tr.GetObject(blockRef.DynamicBlockTableRecord, OpenMode.ForRead);
                                         if (blockDef.Name == "KITNGNum")
                                         {
+                                            blockFoundInSheet = true;
+                                            blockFoundInFile = true;
+
                                             // Изменяем значение атрибута с именем _NUM
                                             foreach (ObjectId attId in blockRef.AttributeCollection)
                                             {
@@ -98,7 +111,14 @@ namespace KITNG_DWG_Sheets_table
                                     }
                                 }
 
+                                // Если блок не был найден на листе, увеличиваем количество пропущенных листов
+                                if (!blockFoundInSheet)
+                                {
+                                    skippedSheets++;
+                                }
+
                                 sheetNumber++; // Увеличиваем номер листа даже если файл не открылся или был пропущен
+                                totalSheets++;
                             }
 
                             // Сохраняем изменения
@@ -106,20 +126,51 @@ namespace KITNG_DWG_Sheets_table
                         }
                     }
 
+                    // Если блок не был найден в файле, добавляем имя файла в список
+                    if (!blockFoundInFile)
+                    {
+                        filesWithoutBlock.Add(file);
+                    }
+
                     // Сохраняем и закрываем документ
                     doc.CloseAndSave(file);
                     ed.WriteMessage($"\nЧертеж сохранен: {file}");
+                    totalFiles++; // Увеличиваем количество успешно обработанных файлов
                 }
                 catch (System.Exception ex)
                 {
                     ed.WriteMessage($"\nОшибка при обработке файла {file}: {ex.Message}");
-                    // Увеличиваем номер листа, даже если возникла ошибка при обработке
-                    sheetNumber++;
+                    skippedFiles++; // Увеличиваем количество пропущенных файлов
+                    sheetNumber++; // Увеличиваем номер листа, даже если возникла ошибка при обработке
                     continue;
                 }
             }
 
-            ed.WriteMessage("\nОбработка завершена.");
+            // Формируем итоговое сообщение
+            string resultMessage = "Обработка завершена.\n";
+
+            resultMessage += $"\nУспешно обработано файлов: {totalFiles}";
+            resultMessage += $"\nОбработано листов: {totalSheets}";
+
+            if (skippedFiles > 0)
+            {
+                resultMessage += $"\nПропущено файлов: {skippedFiles}";
+            }
+
+            if (skippedSheets > 0)
+            {
+                resultMessage += $"\nПропущено листов (без блоков): {skippedSheets}";
+            }
+
+            if (filesWithoutBlock.Count > 0)
+            {
+                resultMessage += "\nФайлы, в которых не был найден блок 'KITNGNum':\n";
+                resultMessage += string.Join("\n", filesWithoutBlock);
+            }
+
+            // Выводим итоговое сообщение
+            MessageBox.Show(resultMessage, "Результаты выполнения");
+            ed.WriteMessage(resultMessage);
         }
 
         // Метод для проверки, занят ли файл
