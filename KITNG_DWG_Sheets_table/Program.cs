@@ -14,7 +14,7 @@ namespace KITNG_DWG_Sheets_table
 {
     public class Program : IExtensionApplication
     {
-        [CommandMethod("ChangeKITNGNumAttribute")]
+        [CommandMethod("KITNG_Sheets_table_numerate")]
         public void ChangeKITNGNumAttribute()
         {
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
@@ -149,8 +149,8 @@ namespace KITNG_DWG_Sheets_table
             // Формируем итоговое сообщение
             string resultMessage = "Обработка завершена.\n";
 
-            resultMessage += $"\nУспешно обработано файлов: {totalFiles}";
-            resultMessage += $"\nОбработано листов: {totalSheets}";
+            resultMessage += $"\nФайлов: {totalFiles}";
+            resultMessage += $"\nЛистов: {totalSheets}";
 
             if (skippedFiles > 0)
             {
@@ -159,7 +159,7 @@ namespace KITNG_DWG_Sheets_table
 
             if (skippedSheets > 0)
             {
-                resultMessage += $"\nПропущено листов (без блоков): {skippedSheets}";
+                resultMessage += $"\nПропущено листов (нет блока номера): {skippedSheets}";
             }
 
             if (filesWithoutBlock.Count > 0)

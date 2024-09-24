@@ -76,7 +76,7 @@ namespace KITNG_DWG_Sheets_table
             this.Controls.Add(this.listBox1);
             this.MinimumSize = new System.Drawing.Size(497, 334);
             this.Name = "Main";
-            this.Text = "Main";
+            this.Text = "Пронумеровать листы KITNG";
             this.ResumeLayout(false);
 
         }
