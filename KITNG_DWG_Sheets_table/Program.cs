@@ -56,6 +56,7 @@ namespace KITNG_DWG_Sheets_table
             foreach (string file in drawingFiles)
             {
                 int initialSheetNumber = sheetNumber; // Начальный номер для файла
+                string blockAttributeCombined = null; // Переменная для объединенной строки атрибутов
 
                 try
                 {
@@ -113,6 +114,27 @@ namespace KITNG_DWG_Sheets_table
                                                 }
                                             }
                                         }
+                                        else if (blockDef.Name == "KITNGMainA" && string.IsNullOrEmpty(blockAttributeCombined))
+                                        {
+                                            // Если это блок "KITNGMainA" и объединенная строка атрибутов еще не заполнена
+                                            string attr1 = "", attr2 = "", attr3 = "";
+                                            foreach (ObjectId attId in blockRef.AttributeCollection)
+                                            {
+                                                AttributeReference attRef = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                                                if (attRef != null)
+                                                {
+                                                    if (attRef.Tag == "_GTOST_1_DWGNAME_1") attr1 = attRef.TextString?.Trim();
+                                                    if (attRef.Tag == "_GTOST_1_DWGNAME_2") attr2 = attRef.TextString?.Trim();
+                                                    if (attRef.Tag == "_GTOST_1_DWGNAME_3") attr3 = attRef.TextString?.Trim();
+                                                }
+                                            }
+
+                                            // Проверяем, что хотя бы один из атрибутов не пустой
+                                            if (!string.IsNullOrWhiteSpace(attr1) || !string.IsNullOrWhiteSpace(attr2) || !string.IsNullOrWhiteSpace(attr3))
+                                            {
+                                                blockAttributeCombined = attr1 + attr2 + attr3; // Объединяем атрибуты
+                                            }
+                                        }
                                     }
                                 }
 
@@ -131,15 +153,16 @@ namespace KITNG_DWG_Sheets_table
                         }
                     }
 
-                    // Если блок не был найден в файле, добавляем имя файла в список
-                    if (!blockFoundInFile)
+                    // Если блок KITNGMainA не был найден или атрибуты пусты, выводим сообщение
+                    if (string.IsNullOrEmpty(blockAttributeCombined))
                     {
-                        filesWithoutBlock.Add(file);
+                        ed.WriteMessage($"\nБлок KITNGMainA не найден или содержит пустые атрибуты в файле: {file}");
+                        blockAttributeCombined = Path.GetFileName(file); // Используем имя файла как fallback
                     }
 
                     // Формируем диапазон номеров листов для текущего файла
                     int finalSheetNumber = sheetNumber - 1; // Конечный номер листа для файла
-                    string sheetRange = $"{Path.GetFileName(file)}: {initialSheetNumber}-{finalSheetNumber}";
+                    string sheetRange = $"{blockAttributeCombined}: {initialSheetNumber}-{finalSheetNumber}";
                     fileSheetRanges.Add(sheetRange);
 
                     // Сохраняем и закрываем документ
@@ -162,15 +185,8 @@ namespace KITNG_DWG_Sheets_table
             {
                 File.WriteAllLines(tempFilePath, fileSheetRanges);
                 ed.WriteMessage($"\nРезультаты сохранены в файл: {tempFilePath}");
-            }
-            catch (System.Exception ex)
-            {
-                ed.WriteMessage($"\nОшибка при сохранении результатов в файл: {ex.Message}");
-            }
 
-            // Открываем файл после создания
-            try
-            {
+                // Открываем файл через Shell после создания
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
                 {
                     FileName = tempFilePath,
@@ -179,7 +195,7 @@ namespace KITNG_DWG_Sheets_table
             }
             catch (System.Exception ex)
             {
-                ed.WriteMessage($"\nОшибка при открытии файла: {ex.Message}");
+                ed.WriteMessage($"\nОшибка при сохранении результатов в файл: {ex.Message}");
             }
 
             // Формируем итоговое сообщение
@@ -236,4 +252,3 @@ namespace KITNG_DWG_Sheets_table
             // Действия при выгрузке плагина
         }
     }
-}
