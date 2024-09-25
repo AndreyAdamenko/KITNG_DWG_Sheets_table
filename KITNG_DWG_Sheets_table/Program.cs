@@ -156,15 +156,19 @@ namespace KITNG_DWG_Sheets_table
                     }
 
                     // Если блок KITNGMainA не был найден или атрибуты пусты, выводим сообщение
-                    if (string.IsNullOrEmpty(blockAttributeCombined))
-                    {
-                        ed.WriteMessage($"\nБлок KITNGMainA не найден или содержит пустые атрибуты в файле: {file}");
-                        blockAttributeCombined = Path.GetFileName(file); // Используем имя файла как fallback
-                    }
+                    //if (string.IsNullOrEmpty(blockAttributeCombined))
+                    //{
+                    //    ed.WriteMessage($"\nБлок KITNGMainA не найден или содержит пустые атрибуты в файле: {file}");
+                    //    blockAttributeCombined = Path.GetFileNameWithoutExtension(file); // Используем имя файла без расширения как fallback
+                    //}
 
-                    // Формируем диапазон номеров листов для текущего файла
+                    var fileName = Path.GetFileNameWithoutExtension(file);
+
+                    // Формируем строку отчета в зависимости от количества страниц
                     int finalSheetNumber = sheetNumber - 1; // Конечный номер листа для файла
-                    string sheetRange = $"{blockAttributeCombined}: {initialSheetNumber}-{finalSheetNumber}";
+                    string sheetRange = (initialSheetNumber == finalSheetNumber)
+                        ? $"{fileName} - {blockAttributeCombined} - {initialSheetNumber}" // Если одна страница, просто указываем номер
+                        : $"{fileName} - {blockAttributeCombined} - {initialSheetNumber}-{finalSheetNumber}"; // Диапазон для нескольких страниц
                     fileSheetRanges.Add(sheetRange);
 
                     // Сохраняем и закрываем документ
