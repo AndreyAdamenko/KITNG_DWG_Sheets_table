@@ -19,6 +19,12 @@ namespace KITNG_DWG_Sheets_table
         {
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
 
+            // Получаем версию AutoCAD
+            var acadVersion = Application.Version.Major; // Получаем major версию AutoCAD
+
+            // Определяем, использовать ли закрытие файлов
+            bool shouldCloseFile = acadVersion != 20; // AutoCAD 2016 соответствует версии 20.0
+
             // Создаем и показываем форму для выбора и сортировки файлов
             List<string> drawingFiles = null;
             int startNumber = 0;
@@ -171,9 +177,18 @@ namespace KITNG_DWG_Sheets_table
                         : $"{fileName} - {blockAttributeCombined} - {initialSheetNumber}-{finalSheetNumber}"; // Диапазон для нескольких страниц
                     fileSheetRanges.Add(sheetRange);
 
-                    // Сохраняем и закрываем документ
-                    doc.CloseAndSave(file);
-                    ed.WriteMessage($"\nЧертеж сохранен: {file}");
+                    // Если версия AutoCAD не 2016 (не 20.0), то закрываем и сохраняем документ
+                    if (shouldCloseFile)
+                    {
+                        doc.CloseAndSave(file);
+                        ed.WriteMessage($"\nЧертеж сохранен и закрыт: {file}");
+                    }
+                    else
+                    {
+                        // Если версия 2016, то выводим сообщение, что файл остается открытым
+                        ed.WriteMessage($"\nЧертеж оставлен открытым для версии AutoCAD 2016: {file}");
+                    }
+
                     totalFiles++; // Увеличиваем количество успешно обработанных файлов
                 }
                 catch (System.Exception ex)
