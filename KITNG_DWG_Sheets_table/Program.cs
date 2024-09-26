@@ -48,6 +48,8 @@ namespace KITNG_DWG_Sheets_table
             int skippedFiles = 0;
             int skippedSheets = 0;
             List<string> filesWithoutBlock = new List<string>();
+            List<string> skippedFilesList = new List<string>();
+            List<string> skippedSheetsList = new List<string>();
 
             // Счетчик для номера листа
             int sheetNumber = startNumber;
@@ -64,6 +66,7 @@ namespace KITNG_DWG_Sheets_table
 
                 Database acDb = new Database(false, true);
                 bool fileIsChanged = false;
+                bool blockFoundInFile = false;
                 try
                 {
                     // Открываем файл DWG
@@ -75,6 +78,7 @@ namespace KITNG_DWG_Sheets_table
                     {
                         ed.WriteMessage($"\nНе удалось обработать файл \"{file}\". Возможно, он открыт другим пользователем.");
                         skippedFiles++;
+                        skippedFilesList.Add(file);
                         acDb.Dispose();
                         continue;
                     }
@@ -89,8 +93,6 @@ namespace KITNG_DWG_Sheets_table
                     try
                     {
                         DBDictionary layoutDict = (DBDictionary)tr.GetObject(acDb.LayoutDictionaryId, OpenMode.ForRead);
-
-                        bool blockFoundInFile = false; // Флаг, указывающий найден ли блок в файле
 
                         foreach (DBDictionaryEntry entry in layoutDict)
                         {
@@ -153,6 +155,7 @@ namespace KITNG_DWG_Sheets_table
                             if (!blockFoundInSheet)
                             {
                                 skippedSheets++;
+                                skippedSheetsList.Add($"Файл: {file}, Лист: {layout.LayoutName}");
                             }
 
                             sheetNumber++; // Увеличиваем номер листа
@@ -173,8 +176,15 @@ namespace KITNG_DWG_Sheets_table
                         ed.WriteMessage($"\nОшибка при обработке файла {file}: {ex.Message}");
                         tr.Abort();
                         skippedFiles++;
+                        skippedFilesList.Add(file);
                         continue;
                     }
+                }
+
+                // Если блок KITNGNum не был найден в файле
+                if (!blockFoundInFile)
+                {
+                    filesWithoutBlock.Add(file);
                 }
 
                 // Если блок KITNGMainA не был найден или атрибуты пусты, используем имя файла
@@ -204,6 +214,7 @@ namespace KITNG_DWG_Sheets_table
                     {
                         ed.WriteMessage($"\nОшибка при сохранении файла {file}: {ex.Message}");
                         skippedFiles++;
+                        skippedFilesList.Add(file);
                     }
                 }
                 else
@@ -218,7 +229,30 @@ namespace KITNG_DWG_Sheets_table
             string tempFilePath = Path.Combine(Path.GetTempPath(), $"KITNG_DWG_Sheets_table_SheetRanges_{DateTime.Now.Ticks}.txt");
             try
             {
-                File.WriteAllLines(tempFilePath, fileSheetRanges);
+                List<string> reportLines = new List<string>();
+
+                reportLines.Add("Диапазоны листов в файлах:");
+                reportLines.AddRange(fileSheetRanges);
+
+                if (skippedFilesList.Count > 0)
+                {
+                    reportLines.Add("\nПропущенные файлы:");
+                    reportLines.AddRange(skippedFilesList);
+                }
+
+                if (skippedSheetsList.Count > 0)
+                {
+                    reportLines.Add("\nПропущенные листы:");
+                    reportLines.AddRange(skippedSheetsList);
+                }
+
+                if (filesWithoutBlock.Count > 0)
+                {
+                    reportLines.Add("\nФайлы, в которых не был найден блок 'KITNGNum':");
+                    reportLines.AddRange(filesWithoutBlock);
+                }
+
+                File.WriteAllLines(tempFilePath, reportLines);
                 ed.WriteMessage($"\nРезультаты сохранены в файл: {tempFilePath}");
 
                 // Открываем файл через Shell после создания
@@ -236,8 +270,8 @@ namespace KITNG_DWG_Sheets_table
             // Формируем итоговое сообщение
             string resultMessage = "Обработка завершена.\n";
 
-            resultMessage += $"\nФайлов: {totalFiles}";
-            resultMessage += $"\nЛистов: {totalSheets}";
+            resultMessage += $"\nФайлов обработано: {totalFiles}";
+            resultMessage += $"\nЛистов обработано: {totalSheets}";
 
             if (skippedFiles > 0)
             {
@@ -246,13 +280,13 @@ namespace KITNG_DWG_Sheets_table
 
             if (skippedSheets > 0)
             {
-                resultMessage += $"\nПропущено листов (нет блока номера): {skippedSheets}";
+                resultMessage += $"\nПропущено листов (без блока номера): {skippedSheets}";
             }
 
             if (filesWithoutBlock.Count > 0)
             {
-                resultMessage += "\nФайлы, в которых не был найден блок 'KITNGNum':\n";
-                resultMessage += string.Join("\n", filesWithoutBlock);
+                resultMessage += "\nФайлы, в которых не был найден блок 'KITNGNum':";
+                resultMessage += "\n" + string.Join("\n", filesWithoutBlock);
             }
 
             // Выводим итоговое сообщение
