@@ -19,12 +19,6 @@ namespace KITNG_DWG_Sheets_table
         {
             Editor ed = Application.DocumentManager.MdiActiveDocument.Editor;
 
-            // Получаем версию AutoCAD
-            var acadVersion = Application.Version.Major; // Получаем major версию AutoCAD
-
-            // Определяем, использовать ли закрытие файлов
-            bool shouldCloseFile = acadVersion != 20; // AutoCAD 2016 соответствует версии 20.0
-
             // Создаем и показываем форму для выбора и сортировки файлов
             List<string> drawingFiles = null;
             int startNumber = 0;
@@ -61,143 +55,163 @@ namespace KITNG_DWG_Sheets_table
             // Строка для записи диапазонов номеров листов в файлы
             List<string> fileSheetRanges = new List<string>();
 
-            foreach (string file in drawingFiles)
+            // Проходим по файлам
+            for (int curDwgIndex = 0; curDwgIndex < drawingFiles.Count; curDwgIndex++)
             {
+                string file = drawingFiles[curDwgIndex];
                 int initialSheetNumber = sheetNumber; // Начальный номер для файла
                 string blockAttributeCombined = null; // Переменная для объединенной строки атрибутов
 
+                Database acDb = new Database(false, true);
+                bool fileIsChanged = false;
                 try
                 {
-                    // Проверяем, доступен ли файл для чтения
-                    if (IsFileLocked(file))
+                    // Открываем файл DWG
+                    acDb.ReadDwgFile(file, FileOpenMode.OpenForReadAndWriteNoShare, false, "");
+                }
+                catch (Autodesk.AutoCAD.Runtime.Exception ex)
+                {
+                    if (ex.ErrorStatus == ErrorStatus.FileSharingViolation)
                     {
-                        ed.WriteMessage($"\nФайл занят и не может быть открыт: {file}");
+                        ed.WriteMessage($"\nНе удалось обработать файл \"{file}\". Возможно, он открыт другим пользователем.");
                         skippedFiles++;
+                        acDb.Dispose();
                         continue;
-                    }
-
-                    // Открываем чертеж
-                    Document doc = Application.DocumentManager.Open(file, false);
-                    ed.WriteMessage($"\nОткрыт чертеж: {file}");
-                    bool blockFoundInFile = false; // Флаг, указывающий найден ли блок в файле
-
-                    using (doc.LockDocument())
-                    {
-                        Database db = doc.Database;
-
-                        // Начинаем транзакцию
-                        using (Transaction tr = db.TransactionManager.StartTransaction())
-                        {
-                            DBDictionary layoutDict = (DBDictionary)tr.GetObject(db.LayoutDictionaryId, OpenMode.ForRead);
-
-                            foreach (DBDictionaryEntry entry in layoutDict)
-                            {
-                                Layout layout = (Layout)tr.GetObject(entry.Value, OpenMode.ForRead);
-
-                                // Пропускаем модельное пространство
-                                if (layout.ModelType) continue;
-
-                                BlockTableRecord btr = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
-                                bool blockFoundInSheet = false;
-
-                                foreach (ObjectId id in btr)
-                                {
-                                    Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
-                                    if (ent is BlockReference blockRef)
-                                    {
-                                        // Проверяем имя блока
-                                        BlockTableRecord blockDef = (BlockTableRecord)tr.GetObject(blockRef.DynamicBlockTableRecord, OpenMode.ForRead);
-                                        if (blockDef.Name == "KITNGNum")
-                                        {
-                                            blockFoundInSheet = true;
-                                            blockFoundInFile = true;
-
-                                            // Изменяем значение атрибута с именем _NUM
-                                            foreach (ObjectId attId in blockRef.AttributeCollection)
-                                            {
-                                                AttributeReference attRef = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
-                                                if (attRef != null && attRef.Tag == "_NUM")
-                                                {
-                                                    attRef.TextString = sheetNumber.ToString();
-                                                }
-                                            }
-                                        }
-                                        else if (blockDef.Name == "KITNGMainA" && string.IsNullOrEmpty(blockAttributeCombined))
-                                        {
-                                            // Если это блок "KITNGMainA" и объединенная строка атрибутов еще не заполнена
-                                            string attr1 = "", attr2 = "", attr3 = "";
-                                            foreach (ObjectId attId in blockRef.AttributeCollection)
-                                            {
-                                                AttributeReference attRef = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
-                                                if (attRef != null)
-                                                {
-                                                    if (attRef.Tag == "_GTOST_1_DWGNAME_1") attr1 = attRef.TextString?.Trim();
-                                                    if (attRef.Tag == "_GTOST_1_DWGNAME_2") attr2 = attRef.TextString?.Trim();
-                                                    if (attRef.Tag == "_GTOST_1_DWGNAME_3") attr3 = attRef.TextString?.Trim();
-                                                }
-                                            }
-
-                                            // Проверяем, что хотя бы один из атрибутов не пустой
-                                            if (!string.IsNullOrWhiteSpace(attr1) || !string.IsNullOrWhiteSpace(attr2) || !string.IsNullOrWhiteSpace(attr3))
-                                            {
-                                                blockAttributeCombined = attr1 + attr2 + attr3; // Объединяем атрибуты
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // Если блок не был найден на листе, увеличиваем количество пропущенных листов
-                                if (!blockFoundInSheet)
-                                {
-                                    skippedSheets++;
-                                }
-
-                                sheetNumber++; // Увеличиваем номер листа
-                                totalSheets++;
-                            }
-
-                            // Сохраняем изменения
-                            tr.Commit();
-                        }
-                    }
-
-                    // Если блок KITNGMainA не был найден или атрибуты пусты, выводим сообщение
-                    //if (string.IsNullOrEmpty(blockAttributeCombined))
-                    //{
-                    //    ed.WriteMessage($"\nБлок KITNGMainA не найден или содержит пустые атрибуты в файле: {file}");
-                    //    blockAttributeCombined = Path.GetFileNameWithoutExtension(file); // Используем имя файла без расширения как fallback
-                    //}
-
-                    var fileName = Path.GetFileNameWithoutExtension(file);
-
-                    // Формируем строку отчета в зависимости от количества страниц
-                    int finalSheetNumber = sheetNumber - 1; // Конечный номер листа для файла
-                    string sheetRange = (initialSheetNumber == finalSheetNumber)
-                        ? $"{fileName} - {blockAttributeCombined} - {initialSheetNumber}" // Если одна страница, просто указываем номер
-                        : $"{fileName} - {blockAttributeCombined} - {initialSheetNumber}-{finalSheetNumber}"; // Диапазон для нескольких страниц
-                    fileSheetRanges.Add(sheetRange);
-
-                    // Если версия AutoCAD не 2016 (не 20.0), то закрываем и сохраняем документ
-                    if (shouldCloseFile)
-                    {
-                        doc.CloseAndSave(file);
-                        ed.WriteMessage($"\nЧертеж сохранен и закрыт: {file}");
                     }
                     else
                     {
-                        // Если версия 2016, то выводим сообщение, что файл остается открытым
-                        ed.WriteMessage($"\nЧертеж оставлен открытым для версии AutoCAD 2016: {file}");
+                        throw ex;
                     }
+                }
 
-                    totalFiles++; // Увеличиваем количество успешно обработанных файлов
-                }
-                catch (System.Exception ex)
+                using (Transaction tr = acDb.TransactionManager.StartTransaction())
                 {
-                    ed.WriteMessage($"\nОшибка при обработке файла {file}: {ex.Message}");
-                    skippedFiles++; // Увеличиваем количество пропущенных файлов
-                    sheetNumber++; // Увеличиваем номер листа, даже если возникла ошибка при обработке
-                    continue;
+                    try
+                    {
+                        DBDictionary layoutDict = (DBDictionary)tr.GetObject(acDb.LayoutDictionaryId, OpenMode.ForRead);
+
+                        bool blockFoundInFile = false; // Флаг, указывающий найден ли блок в файле
+
+                        foreach (DBDictionaryEntry entry in layoutDict)
+                        {
+                            Layout layout = (Layout)tr.GetObject(entry.Value, OpenMode.ForRead);
+
+                            // Пропускаем модельное пространство
+                            if (layout.ModelType) continue;
+
+                            BlockTableRecord btr = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
+                            bool blockFoundInSheet = false;
+
+                            foreach (ObjectId id in btr)
+                            {
+                                Entity ent = tr.GetObject(id, OpenMode.ForRead) as Entity;
+                                if (ent is BlockReference blockRef)
+                                {
+                                    // Проверяем имя блока
+                                    BlockTableRecord blockDef = (BlockTableRecord)tr.GetObject(blockRef.DynamicBlockTableRecord, OpenMode.ForRead);
+                                    if (blockDef.Name == "KITNGNum")
+                                    {
+                                        blockFoundInSheet = true;
+                                        blockFoundInFile = true;
+                                        fileIsChanged = true;
+
+                                        // Изменяем значение атрибута с именем _NUM
+                                        foreach (ObjectId attId in blockRef.AttributeCollection)
+                                        {
+                                            AttributeReference attRef = tr.GetObject(attId, OpenMode.ForWrite) as AttributeReference;
+                                            if (attRef != null && attRef.Tag == "_NUM")
+                                            {
+                                                attRef.TextString = sheetNumber.ToString();
+                                            }
+                                        }
+                                    }
+                                    else if (blockDef.Name == "KITNGMainA" && string.IsNullOrEmpty(blockAttributeCombined))
+                                    {
+                                        // Если это блок "KITNGMainA" и объединенная строка атрибутов еще не заполнена
+                                        string attr1 = "", attr2 = "", attr3 = "";
+                                        foreach (ObjectId attId in blockRef.AttributeCollection)
+                                        {
+                                            AttributeReference attRef = tr.GetObject(attId, OpenMode.ForRead) as AttributeReference;
+                                            if (attRef != null)
+                                            {
+                                                if (attRef.Tag == "_GTOST_1_DWGNAME_1") attr1 = attRef.TextString?.Trim();
+                                                if (attRef.Tag == "_GTOST_1_DWGNAME_2") attr2 = attRef.TextString?.Trim();
+                                                if (attRef.Tag == "_GTOST_1_DWGNAME_3") attr3 = attRef.TextString?.Trim();
+                                            }
+                                        }
+
+                                        // Проверяем, что хотя бы один из атрибутов не пустой
+                                        if (!string.IsNullOrWhiteSpace(attr1) || !string.IsNullOrWhiteSpace(attr2) || !string.IsNullOrWhiteSpace(attr3))
+                                        {
+                                            blockAttributeCombined = attr1 + attr2 + attr3; // Объединяем атрибуты
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Если блок не был найден на листе, увеличиваем количество пропущенных листов
+                            if (!blockFoundInSheet)
+                            {
+                                skippedSheets++;
+                            }
+
+                            sheetNumber++; // Увеличиваем номер листа
+                            totalSheets++;
+                        }
+
+                        if (fileIsChanged)
+                        {
+                            tr.Commit();
+                        }
+                        else
+                        {
+                            tr.Abort();
+                        }
+                    }
+                    catch (System.Exception ex)
+                    {
+                        ed.WriteMessage($"\nОшибка при обработке файла {file}: {ex.Message}");
+                        tr.Abort();
+                        skippedFiles++;
+                        continue;
+                    }
                 }
+
+                // Если блок KITNGMainA не был найден или атрибуты пусты, используем имя файла
+                if (string.IsNullOrEmpty(blockAttributeCombined))
+                {
+                    blockAttributeCombined = Path.GetFileNameWithoutExtension(file); // Используем имя файла без расширения как запасной вариант
+                }
+
+                var fileName = Path.GetFileNameWithoutExtension(file);
+
+                // Формируем строку отчета в зависимости от количества страниц
+                int finalSheetNumber = sheetNumber - 1; // Конечный номер листа для файла
+                string sheetRange = (initialSheetNumber == finalSheetNumber)
+                    ? $"{fileName} - {blockAttributeCombined} - {initialSheetNumber}" // Если одна страница, просто указываем номер
+                    : $"{fileName} - {blockAttributeCombined} - {initialSheetNumber}-{finalSheetNumber}"; // Диапазон для нескольких страниц
+                fileSheetRanges.Add(sheetRange);
+
+                if (fileIsChanged)
+                {
+                    try
+                    {
+                        acDb.SaveAs(file, true, DwgVersion.Newest, acDb.SecurityParameters);
+                        ed.WriteMessage($"\nЧертеж сохранен: {file}");
+                        totalFiles++; // Увеличиваем количество успешно обработанных файлов
+                    }
+                    catch (System.Exception ex)
+                    {
+                        ed.WriteMessage($"\nОшибка при сохранении файла {file}: {ex.Message}");
+                        skippedFiles++;
+                    }
+                }
+                else
+                {
+                    ed.WriteMessage($"\nИзменений не внесено в файл: {file}");
+                }
+
+                acDb.Dispose();
             }
 
             // Записываем данные в текстовый файл в папку temp
