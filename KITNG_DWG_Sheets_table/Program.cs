@@ -94,13 +94,26 @@ namespace KITNG_DWG_Sheets_table
                     {
                         DBDictionary layoutDict = (DBDictionary)tr.GetObject(acDb.LayoutDictionaryId, OpenMode.ForRead);
 
+                        // 1. Создаем список для хранения листов (пропуская пространство модели)
+                        List<Layout> layouts = new List<Layout>();
+
                         foreach (DBDictionaryEntry entry in layoutDict)
                         {
                             Layout layout = (Layout)tr.GetObject(entry.Value, OpenMode.ForRead);
 
-                            // Пропускаем модельное пространство
-                            if (layout.ModelType) continue;
+                            // Добавляем в список только листы (Layouts), пропуская Model
+                            if (!layout.ModelType)
+                            {
+                                layouts.Add(layout);
+                            }
+                        }
 
+                        // 2. Сортируем листы по их визуальному порядку (слева направо)
+                        layouts.Sort((l1, l2) => l1.TabOrder.CompareTo(l2.TabOrder));
+
+                        // 3. Теперь перебираем уже отсортированные листы
+                        foreach (Layout layout in layouts)
+                        {
                             BlockTableRecord btr = (BlockTableRecord)tr.GetObject(layout.BlockTableRecordId, OpenMode.ForRead);
                             bool blockFoundInSheet = false;
 
